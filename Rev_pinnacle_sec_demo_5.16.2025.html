@@ -1,0 +1,669 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pinnacle Security Quantitative Analysis Tool - Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1, h2, h3 {
+            color: #333;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .form-group {
+            margin: 10px 0;
+        }
+        label {
+            display: inline-block;
+            width: 200px;
+            font-weight: bold;
+        }
+        input, select, button {
+            padding: 8px;
+            margin: 5px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+        button {
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .results {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #fff;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        th, td {
+            border: 1px solid #ccc;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #e0e0e0;
+        }
+        canvas {
+            max-width: 100%;
+            margin: 20px 0;
+        }
+        .demo-note {
+            background-color: #e7f3fe;
+            border-left: 6px solid #2196F3;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Pinnacle Security Quantitative Analysis Tool - Demo</h1>
+    <div class="demo-note">
+        <p><strong>Welcome to the Demo!</strong> This is a fully functional demonstration of the Pinnacle Security Quantitative Analysis Tool, designed for corporate security professionals to evaluate program metrics. Explore data entry, calculations, visualizations, and export options. Note: Data is stored locally in your browser for this demo and resets on page refresh.</p>
+    </div>
+
+    <div class="section">
+        <h2>1. Configuration</h2>
+        <div class="form-group">
+            <h3>Cost Efficiency (CE) Weights</h3>
+            <label>TDR Weight (w1):</label>
+            <input type="number" id="w1" step="0.01" value="0.4"><br>
+            <label>IP Weight (w2):</label>
+            <input type="number" id="w2" step="0.01" value="0.3"><br>
+            <label>RT Weight (w3):</label>
+            <input type="number" id="w3" step="0.01" value="0.2"><br>
+            <label>ES Weight (w4):</label>
+            <input type="number" id="w4" step="0.01" value="0.1"><br>
+        </div>
+        <div class="form-group">
+            <h3>CE Input Values (Optional Overrides)</h3>
+            <p>Enter values to override database values for CE calculation. Leave as 0 to use database values.</p>
+            <label>TDR Value:</label>
+            <input type="number" id="tdrOverride" value="0"><br>
+            <label>IP Value:</label>
+            <input type="number" id="ipOverride" value="0"><br>
+            <label>RT Value:</label>
+            <input type="number" id="rtOverride" value="0"><br>
+            <label>ES Value:</label>
+            <input type="number" id="esOverride" value="0"><br>
+        </div>
+        <button onclick="saveConfiguration()">Save Configuration</button>
+        <button onclick="calculateCE()">CALCULATE</button>
+    </div>
+
+    <div class="section">
+        <h2>2. Data Entry</h2>
+        <div class="form-group">
+            <h3>Program Costs</h3>
+            <label>Year:</label>
+            <input type="number" id="costYear" placeholder="e.g., 2025"><br>
+            <label>Total Annual Program Cost ($):</label>
+            <input type="number" id="totalCost" placeholder="e.g., 100000"><br>
+            <label>Monitoring Costs ($):</label>
+            <input type="number" id="monitoringCost" placeholder="e.g., 20000"><br>
+            <button onclick="addCost()">Add Cost</button>
+        </div>
+        <div class="form-group">
+            <h3>Threats</h3>
+            <label>Date:</label>
+            <input type="date" id="threatDate"><br>
+            <label>Description:</label>
+            <input type="text" id="threatDescription" placeholder="e.g., Phishing Attempt"><br>
+            <label>Mitigated:</label>
+            <select id="threatMitigated">
+                <option value="Yes">Yes</option>
+                <option value="No">No</option>
+            </select><br>
+            <button onclick="addThreat()">Add Threat</button>
+        </div>
+        <div class="form-group">
+            <h3>Incidents</h3>
+            <label>Date:</label>
+            <input type="date" id="incidentDate"><br>
+            <label>Type:</label>
+            <input type="text" id="incidentType" placeholder="e.g., Data Breach"><br>
+            <label>Estimated Financial Impact/Savings ($):</label>
+            <input type="number" id="incidentImpact" placeholder="e.g., 50000"><br>
+            <label>Is Baseline:</label>
+            <select id="incidentBaseline">
+                <option value="No">No</option>
+                <option value="Yes">Yes</option>
+            </select><br>
+            <button onclick="addIncident()">Add Incident</button>
+        </div>
+        <div class="form-group">
+            <h3>Response Times</h3>
+            <label>Date of Record:</label>
+            <input type="date" id="responseDate"><br>
+            <label>Time (hours):</label>
+            <input type="number" id="responseTime" placeholder="e.g., 4"><br>
+            <label>Is Baseline:</label>
+            <select id="responseBaseline">
+                <option value="No">No</option>
+                <option value="Yes">Yes</option>
+            </select><br>
+            <button onclick="addResponseTime()">Add Response Time</button>
+        </div>
+        <div class="form-group">
+            <h3>Executive/Employee Satisfaction</h3>
+            <label>Date of Survey:</label>
+            <input type="date" id="satisfactionDate"><br>
+            <label>Score (0-100):</label>
+            <input type="number" id="satisfactionScore" min="0" max="100" placeholder="e.g., 85"><br>
+            <button onclick="addSatisfaction()">Add Satisfaction</button>
+        </div>
+        <div class="form-group">
+            <h3>Insurance Reductions</h3>
+            <label>Year:</label>
+            <input type="number" id="insuranceYear" placeholder="e.g., 2025"><br>
+            <label>Annual Reduction Amount ($):</label>
+            <input type="number" id="insuranceReduction" placeholder="e.g., 10000"><br>
+            <button onclick="addInsurance()">Add Insurance</button>
+        </div>
+        <button onclick="clearData()">CLEAR DATA</button>
+    </div>
+
+    <div class="section">
+        <h2>3. Manage Data</h2>
+        <div class="form-group">
+            <h3>Import Data from CSV</h3>
+            <label>Select Table to Import Into:</label>
+            <select id="importTable">
+                <option value="Program Costs">Program Costs</option>
+                <option value="Threats">Threats</option>
+                <option value="Incidents">Incidents</option>
+                <option value="Response Times">Response Times</option>
+                <option value="Satisfaction">Satisfaction</option>
+                <option value="Insurance Reductions">Insurance Reductions</option>
+                <option value="Cost Efficiency Inputs">Cost Efficiency Inputs</option>
+            </select><br>
+            <input type="file" id="importFile" accept=".csv"><br>
+            <button onclick="importData()">Import File</button>
+        </div>
+        <div class="form-group">
+            <h3>View Stored Data</h3>
+            <label>Select Table to View:</label>
+            <select id="viewTable">
+                <option value="Program Costs">Program Costs</option>
+                <option value="Threats">Threats</option>
+                <option value="Incidents">Incidents</option>
+                <option value="Response Times">Response Times</option>
+                <option value="Satisfaction">Satisfaction</option>
+                <option value="Insurance Reductions">Insurance Reductions</option>
+                <option value="Cost Efficiency Inputs">Cost Efficiency Inputs</option>
+            </select><br>
+            <button onclick="viewData()">View Data</button>
+        </div>
+        <div id="dataTable"></div>
+    </div>
+
+    <div class="section">
+        <h2>4. Perform Quantitative Analysis</h2>
+        <div class="form-group">
+            <label>Year for Analysis:</label>
+            <input type="number" id="analysisYear" placeholder="e.g., 2025"><br>
+        </div>
+        <div class="form-group">
+            <h3>Calculate Individual Formulas</h3>
+            <input type="checkbox" id="calcCE"> Calculate CE<br>
+            <input type="checkbox" id="calcROI"> Calculate ROI<br>
+            <input type="checkbox" id="calcIFR"> Calculate IFR<br>
+            <input type="checkbox" id="calcTDR"> Calculate TDR Efficiency<br>
+            <input type="checkbox" id="calcRTO"> Calculate RTO<br>
+            <input type="checkbox" id="calcCTR"> Calculate CTR<br>
+            <input type="checkbox" id="calcRER"> Calculate RER<br>
+        </div>
+        <button onclick="calculateChecked()">Calculate Checked Options</button>
+        <button onclick="saveResults()">SAVE RESULTS</button>
+        <button onclick="viewSavedResults()">View Saved Results</button>
+        <button onclick="exportPDF()">Export as PDF</button>
+        <button onclick="exportExcel()">Export as Excel</button>
+        <div id="results" class="results"></div>
+        <canvas id="resultsChart"></canvas>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script>
+        let data = {
+            'Program Costs': [],
+            'Threats': [],
+            'Incidents': [],
+            'Response Times': [],
+            'Satisfaction': [],
+            'Insurance Reductions': [],
+            'Cost Efficiency Inputs': [],
+            'Results': []
+        };
+        let chart = null;
+
+        function saveToLocalStorage() {
+            localStorage.setItem('pinnacleDemoData', JSON.stringify(data));
+        }
+
+        function loadFromLocalStorage() {
+            const stored = localStorage.getItem('pinnacleDemoData');
+            if (stored) {
+                data = JSON.parse(stored);
+            }
+        }
+
+        loadFromLocalStorage();
+
+        function saveConfiguration() {
+            alert('Configuration saved (demo mode: stored in browser).');
+            saveToLocalStorage();
+        }
+
+        function addCost() {
+            const year = document.getElementById('costYear').value;
+            const totalCost = parseFloat(document.getElementById('totalCost').value);
+            const monitoringCost = parseFloat(document.getElementById('monitoringCost').value);
+            if (year && !isNaN(totalCost) && !isNaN(monitoringCost)) {
+                data['Program Costs'].push({ year, totalCost, monitoringCost });
+                saveToLocalStorage();
+                alert('Cost added.');
+            } else {
+                alert('Please fill all fields with valid values.');
+            }
+        }
+
+        function addThreat() {
+            const date = document.getElementById('threatDate').value;
+            const description = document.getElementById('threatDescription').value;
+            const mitigated = document.getElementById('threatMitigated').value;
+            if (date && description) {
+                data['Threats'].push({ date, description, mitigated });
+                saveToLocalStorage();
+                alert('Threat added.');
+            } else {
+                alert('Please fill all fields.');
+            }
+        }
+
+        function addIncident() {
+            const date = document.getElementById('incidentDate').value;
+            const type = document.getElementById('incidentType').value;
+            const impact = parseFloat(document.getElementById('incidentImpact').value);
+            const baseline = document.getElementById('incidentBaseline').value;
+            if (date && type && !isNaN(impact)) {
+                data['Incidents'].push({ date, type, impact, baseline, year: new Date(date).getFullYear() });
+                saveToLocalStorage();
+                alert('Incident added.');
+            } else {
+                alert('Please fill all fields with valid values.');
+            }
+        }
+
+        function addResponseTime() {
+            const date = document.getElementById('responseDate').value;
+            const time = parseFloat(document.getElementById('responseTime').value);
+            const baseline = document.getElementById('responseBaseline').value;
+            if (date && !isNaN(time)) {
+                data['Response Times'].push({ date, time, baseline, year: new Date(date).getFullYear() });
+                saveToLocalStorage();
+                alert('Response Time added.');
+            } else {
+                alert('Please fill all fields with valid values.');
+            }
+        }
+
+        function addSatisfaction() {
+            const date = document.getElementById('satisfactionDate').value;
+            const score = parseFloat(document.getElementById('satisfactionScore').value);
+            if (date && !isNaN(score) && score >= 0 && score <= 100) {
+                data['Satisfaction'].push({ date, score, year: new Date(date).getFullYear() });
+                saveToLocalStorage();
+                alert('Satisfaction added.');
+            } else {
+                alert('Please fill all fields with valid values (score 0-100).');
+            }
+        }
+
+        function addInsurance() {
+            const year = document.getElementById('insuranceYear').value;
+            const reduction = parseFloat(document.getElementById('insuranceReduction').value);
+            if (year && !isNaN(reduction)) {
+                data['Insurance Reductions'].push({ year, reduction });
+                saveToLocalStorage();
+                alert('Insurance Reduction added.');
+            } else {
+                alert('Please fill all fields with valid values.');
+            }
+        }
+
+        function clearData() {
+            if (confirm('Are you sure you want to clear all data?')) {
+                data = {
+                    'Program Costs': [],
+                    'Threats': [],
+                    'Incidents': [],
+                    'Response Times': [],
+                    'Satisfaction': [],
+                    'Insurance Reductions': [],
+                    'Cost Efficiency Inputs': [],
+                    'Results': []
+                };
+                saveToLocalStorage();
+                document.getElementById('dataTable').innerHTML = '';
+                document.getElementById('results').innerHTML = '';
+                if (chart) chart.destroy();
+                alert('Data cleared.');
+            }
+        }
+
+        function importData() {
+            const fileInput = document.getElementById('importFile');
+            const table = document.getElementById('importTable').value;
+            const file = fileInput.files[0];
+
+            if (!file) {
+                alert('Please select a file.');
+                return;
+            }
+
+            Papa.parse(file, {
+                header: true,
+                complete: function(results) {
+                    data[table] = results.data;
+                    if (table === 'Cost Efficiency Inputs') {
+                        const latest = results.data[results.data.length - 1];
+                        document.getElementById('tdrOverride').value = latest.tdr || 0;
+                        document.getElementById('ipOverride').value = latest.ip || 0;
+                        document.getElementById('rtOverride').value = latest.rt || 0;
+                        document.getElementById('esOverride').value = latest.es || 0;
+                    }
+                    saveToLocalStorage();
+                    alert('Data imported successfully.');
+                }
+            });
+        }
+
+        function viewData() {
+            const table = document.getElementById('viewTable').value;
+            const tableDiv = document.getElementById('dataTable');
+            let html = `<h3>${table}</h3><table><tr>`;
+
+            if (data[table].length === 0) {
+                tableDiv.innerHTML = `<p>No data available for ${table}.</p>`;
+                return;
+            }
+
+            const headers = Object.keys(data[table][0]);
+            headers.forEach(header => {
+                html += `<th>${header}</th>`;
+            });
+            html += '</tr>';
+
+            data[table].forEach(row => {
+                html += '<tr>';
+                headers.forEach(header => {
+                    html += `<td>${row[header] || ''}</td>`;
+                });
+                html += '</tr>';
+            });
+
+            html += '</table>';
+            tableDiv.innerHTML = html;
+        }
+
+        function calculateCE() {
+            const w1 = parseFloat(document.getElementById('w1').value) || 0;
+            const w2 = parseFloat(document.getElementById('w2').value) || 0;
+            const w3 = parseFloat(document.getElementById('w3').value) || 0;
+            const w4 = parseFloat(document.getElementById('w4').value) || 0;
+
+            const tdrOverride = parseFloat(document.getElementById('tdrOverride').value) || 0;
+            const ipOverride = parseFloat(document.getElementById('ipOverride').value) || 0;
+            const rtOverride = parseFloat(document.getElementById('rtOverride').value) || 0;
+            const esOverride = parseFloat(document.getElementById('esOverride').value) || 0;
+
+            const year = document.getElementById('analysisYear').value;
+            const costs = data['Program Costs'].filter(c => c.year == year);
+            const totalCost = costs.reduce((sum, c) => sum + (c.totalCost || 0), 0);
+
+            const tdr = tdrOverride || data['Threats'].filter(t => t.mitigated === 'Yes').length;
+            const ip = ipOverride || data['Incidents'].filter(i => i.baseline === 'No').reduce((sum, i) => sum + (i.impact || 0), 0);
+            const rt = rtOverride || data['Response Times'].filter(r => r.baseline === 'No').reduce((sum, r) => sum + (r.time || 0), 0);
+            const es = esOverride || (data['Satisfaction'].reduce((sum, s) => sum + (s.score || 0), 0) / (data['Satisfaction'].length || 1));
+
+            const ce = (w1 * tdr + w2 * ip - w3 * rt + w4 * es) / (totalCost || 1);
+            return ce;
+        }
+
+        function calculateROI() {
+            const year = document.getElementById('analysisYear').value;
+            const savings = data['Incidents'].filter(i => i.baseline === 'No' && i.year == year).reduce((sum, i) => sum + (i.impact || 0), 0);
+            const reductions = data['Insurance Reductions'].filter(r => r.year == year).reduce((sum, r) => sum + (r.reduction || 0), 0);
+            const costs = data['Program Costs'].filter(c => c.year == year).reduce((sum, c) => sum + (c.totalCost || 0), 0);
+            return ((savings + reductions - costs) / (costs || 1)) * 100;
+        }
+
+        function calculateIFR() {
+            const year = document.getElementById('analysisYear').value;
+            const ib = data['Incidents'].filter(i => i.baseline === 'Yes' && i.year == year).length;
+            const ia = data['Incidents'].filter(i => i.baseline === 'No' && i.year == year).length;
+            return ((ib - ia) / (ib || 1)) * 100;
+        }
+
+        function calculateTDR() {
+            const year = document.getElementById('analysisYear').value;
+            const tdr = data['Threats'].filter(t => t.mitigated === 'Yes' && t.year == year).length;
+            const mc = data['Program Costs'].filter(c => c.year == year).reduce((sum, c) => sum + (c.monitoringCost || 0), 0);
+            return tdr / (mc || 1);
+        }
+
+        function calculateRTO() {
+            const year = document.getElementById('analysisYear').value;
+            const rtb = data['Response Times'].filter(r => r.baseline === 'Yes' && r.year == year).reduce((sum, r) => sum + (r.time || 0), 0);
+            const rta = data['Response Times'].filter(r => r.baseline === 'No' && r.year == year).reduce((sum, r) => sum + (r.time || 0), 0);
+            return ((rtb - rta) / (rtb || 1)) * 100;
+        }
+
+        function calculateCTR() {
+            const year = document.getElementById('analysisYear').value;
+            const tc = data['Program Costs'].filter(c => c.year == year).reduce((sum, c) => sum + (c.totalCost || 0), 0);
+            const tdr = data['Threats'].filter(t => t.mitigated === 'Yes' && t.year == year).length;
+            return tc / (tdr || 1);
+        }
+
+        function calculateRER() {
+            const year = document.getElementById('analysisYear').value;
+            const reb = data['Satisfaction'].filter(s => s.baseline === 'Yes' && s.year == year).reduce((sum, s) => sum + (s.score || 0), 0);
+            const rea = data['Satisfaction'].filter(s => s.baseline === 'No' && s.year == year).reduce((sum, s) => sum + (s.score || 0), 0);
+            return ((reb - rea) / (reb || 1)) * 100;
+        }
+
+        function calculateChecked() {
+            const resultsDiv = document.getElementById('results');
+            let results = [];
+            let chartData = { labels: [], datasets: [{ label: 'Metrics', data: [], backgroundColor: [] }] };
+
+            if (document.getElementById('calcCE').checked) {
+                const ce = calculateCE();
+                results.push(`Cost Efficiency (CE): ${ce.toFixed(2)}`);
+                chartData.labels.push('CE');
+                chartData.datasets[0].data.push(ce);
+                chartData.datasets[0].backgroundColor.push('rgba(75, 192, 192, 0.2)');
+            }
+            if (document.getElementById('calcROI').checked) {
+                const roi = calculateROI();
+                results.push(`Return on Investment (ROI): ${roi.toFixed(2)}%`);
+                chartData.labels.push('ROI');
+                chartData.datasets[0].data.push(roi);
+                chartData.datasets[0].backgroundColor.push('rgba(255, 99, 132, 0.2)');
+            }
+            if (document.getElementById('calcIFR').checked) {
+                const ifr = calculateIFR();
+                results.push(`Incident Frequency Reduction (IFR): ${ifr.toFixed(2)}%`);
+                chartData.labels.push('IFR');
+                chartData.datasets[0].data.push(ifr);
+                chartData.datasets[0].backgroundColor.push('rgba(54, 162, 235, 0.2)');
+            }
+            if (document.getElementById('calcTDR').checked) {
+                const tdr = calculateTDR();
+                results.push(`TDR Efficiency: ${tdr.toFixed(2)}`);
+                chartData.labels.push('TDR Efficiency');
+                chartData.datasets[0].data.push(tdr);
+                chartData.datasets[0].backgroundColor.push('rgba(255, 206, 86, 0.2)');
+            }
+            if (document.getElementById('calcRTO').checked) {
+                const rto = calculateRTO();
+                results.push(`Response Time Optimization (RTO): ${rto.toFixed(2)}%`);
+                chartData.labels.push('RTO');
+                chartData.datasets[0].data.push(rto);
+                chartData.datasets[0].backgroundColor.push('rgba(75, 192, 192, 0.2)');
+            }
+            if (document.getElementById('calcCTR').checked) {
+                const ctr = calculateCTR();
+                results.push(`Cost-to-Threat Ratio (CTR): ${ctr.toFixed(2)}`);
+                chartData.labels.push('CTR');
+                chartData.datasets[0].data.push(ctr);
+                chartData.datasets[0].backgroundColor.push('rgba(153, 102, 255, 0.2)');
+            }
+            if (document.getElementById('calcRER').checked) {
+                const rer = calculateRER();
+                results.push(`Reputation/Employee Satisfaction Reduction (RER): ${rer.toFixed(2)}%`);
+                chartData.labels.push('RER');
+                chartData.datasets[0].data.push(rer);
+                chartData.datasets[0].backgroundColor.push('rgba(255, 159, 64, 0.2)');
+            }
+
+            resultsDiv.innerHTML = results.map(r => `<p>${r}</p>`).join('');
+            data['Results'].push({
+                date: new Date().toISOString(),
+                results: results
+            });
+            saveToLocalStorage();
+
+            if (chart) chart.destroy();
+            chart = new Chart(document.getElementById('resultsChart'), {
+                type: 'bar',
+                data: chartData,
+                options: {
+                    scales: { y: { beginAtZero: true } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        }
+
+        function saveResults() {
+            const results = data['Results'][data['Results'].length - 1];
+            if (!results) {
+                alert('No results to save.');
+                return;
+            }
+
+            const date = new Date().toISOString().slice(0, 10).replace(/-/g, '.');
+            const csvContent = Papa.unparse([{ results: results.results.join(';') }]);
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `${date}_Pinnacle_Quantitative_Analysis.csv`;
+            link.click();
+            alert('Results saved to downloads (demo mode).');
+        }
+
+        function viewSavedResults() {
+            const resultsDiv = document.getElementById('results');
+            if (data['Results'].length === 0) {
+                resultsDiv.innerHTML = '<p>No saved results available.</p>';
+                return;
+            }
+
+            let html = '<h3>Saved Results</h3><table><tr><th>Date</th><th>Results</th></tr>';
+            data['Results'].forEach(r => {
+                html += `<tr><td>${r.date}</td><td>${r.results.join('<br>')}</td></tr>`;
+            });
+            html += '</table>';
+            resultsDiv.innerHTML = html;
+        }
+
+        function exportPDF() {
+            const element = document.body;
+            html2pdf().from(element).set({
+                filename: `${new Date().toISOString().slice(0, 10).replace(/-/g, '.')}_Pinnacle_Demo_Report.pdf`,
+                margin: 10,
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            }).save();
+        }
+
+        function exportExcel() {
+            const date = new Date().toISOString().slice(0, 10).replace(/-/g, '.');
+            const wb = XLSX.utils.book_new();
+            
+            Object.keys(data).forEach(table => {
+                if (data[table].length > 0) {
+                    const ws = XLSX.utils.json_to_sheet(data[table]);
+                    XLSX.utils.book_append_sheet(wb, ws, table);
+                }
+            });
+
+            XLSX.writeFile(wb, `${date}_Pinnacle_Demo_Data.xlsx`);
+        }
+    </script>
+</body>
+</html>
